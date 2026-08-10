@@ -25,12 +25,13 @@ Three views sit on top of it, to be built in later slices: ask questions, browse
 Paste a URL.
 The system fetches and cleans the content, Claude extracts typed entities and relationships with citations, the result is stored in a graph, and the graph is rendered as an interactive diagram in a local browser view.
 
+Video is handled completely from day one: audio is downloaded and transcribed locally with Whisper, so any video extracts fully whether or not it has captions.
+
 ### Out of scope (later slices)
 
 - Ask-questions view (query the graph, synthesize an answer with citations).
 - Auto-generated wiki pages per entity.
 - Pattern-surfacing view.
-- True audio transcription with Whisper for videos without captions.
 - Bulk import, feed monitoring, hosting, and multi-user access.
 
 ## Architecture
@@ -70,7 +71,8 @@ Any module can be understood and tested without reading the internals of the oth
 | Piece | Choice | Rationale |
 |---|---|---|
 | Fetch web/blog | `httpx` + `trafilatura` | Extracts just the article text; no headless browser. |
-| Fetch video | `youtube-transcript-api` | Captions only; tiny dependency. Whisper is a later slice. |
+| Transcribe video | `yt-dlp` (audio) + `faster-whisper` (local transcription) | Fully local, free after a one-time model download; transcribes any video, captioned or not. `faster-whisper` is ~4x lighter/faster than reference Whisper with the same accuracy, and integrates in-process. Requires `ffmpeg` (system dependency). |
+| Fast video fallback | `youtube-transcript-api` | Optional captions-only path for when speed matters more than completeness; tiny dependency. |
 | Extract | Claude Agent SDK behind an `Extractor` interface | Runs on the owner's Claude subscription; interface enables a `FakeExtractor` in tests and a later swap to the metered API. |
 | Graph store | stdlib `sqlite3` (no ORM) | One file, no server, transparent SQL; sufficient for low-hundreds of nodes. |
 | Analysis/traversal | `networkx`, loaded from SQLite on demand | Pure-Python and light; SQLite remains the source of truth. |
@@ -82,8 +84,10 @@ Any module can be understood and tested without reading the internals of the oth
 
 - Input: a URL.
 - Output: a normalized source document (url, source type, title, clean text).
-- Dispatch by URL: YouTube links use `youtube-transcript-api`; other links use `httpx` + `trafilatura`.
-- A YouTube video with no captions is reported as a clear, recoverable error (not silently skipped).
+- Dispatch by URL: video links are transcribed locally (audio via `yt-dlp`, transcription via `faster-whisper`); other links use `httpx` + `trafilatura`.
+- Local transcription is the default video path and works with or without captions. An optional captions-first fast path (`youtube-transcript-api`) can be used when speed matters more than completeness.
+- The Whisper model size is configurable (default `small` or `medium`), trading speed against accuracy.
+- Fetch and transcription failures (dead link, unavailable audio, missing `ffmpeg`) are reported as clear, recoverable errors, not silently skipped.
 
 ### extract
 
