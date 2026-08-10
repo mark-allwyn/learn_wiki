@@ -30,8 +30,21 @@ class _BufferLogHandler(logging.Handler):
 
 _buffer_handler = _BufferLogHandler()
 _buffer_handler.setFormatter(logging.Formatter("%(asctime)s  %(message)s", datefmt="%H:%M:%S"))
-logger.addHandler(_buffer_handler)
-logger.setLevel(logging.INFO)
+
+
+def _attach_buffer_handler() -> None:
+    # uvicorn reconfigures the uvicorn.error logger when the server starts,
+    # which drops any handler added at import time. Attach idempotently both at
+    # import (for TestClient, which never runs uvicorn's logging setup) and
+    # again on app startup (after uvicorn has configured logging) so ingest
+    # lines are captured in every run mode.
+    if _buffer_handler not in logger.handlers:
+        logger.addHandler(_buffer_handler)
+    if logger.level == logging.NOTSET or logger.level > logging.INFO:
+        logger.setLevel(logging.INFO)
+
+
+_attach_buffer_handler()
 
 
 def create_app(store: GraphStore, extractor: Extractor, ingest_fn=default_ingest) -> FastAPI:
@@ -39,6 +52,10 @@ def create_app(store: GraphStore, extractor: Extractor, ingest_fn=default_ingest
 
     @app.post("/ingest")
     def ingest_endpoint(body: dict):
+        # Re-attach the log buffer here (idempotent) - uvicorn's startup logging
+        # config drops import-time handlers, and this runs after that, before the
+        # first ingest line is logged.
+        _attach_buffer_handler()
         url_raw = body.get("url", "")
         if not isinstance(url_raw, str):
             return JSONResponse({"error": "url must be a string"}, status_code=422)
