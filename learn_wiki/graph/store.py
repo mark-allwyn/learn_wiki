@@ -1,6 +1,7 @@
 import sqlite3
 from learn_wiki.models import SourceDocument, Extraction
 from learn_wiki import ontology
+from learn_wiki.errors import ExtractionError
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS node_types (name TEXT PRIMARY KEY, pending INTEGER DEFAULT 0);
@@ -26,7 +27,7 @@ CREATE TABLE IF NOT EXISTS edges (
     target_node INTEGER NOT NULL REFERENCES nodes(id),
     type TEXT NOT NULL,
     source_id INTEGER NOT NULL REFERENCES sources(id),
-    quote TEXT NOT NULL
+    quote TEXT NOT NULL CHECK(length(trim(quote)) > 0)
 );
 """
 
@@ -70,15 +71,32 @@ class GraphStore:
         return cur.fetchone()["id"]
 
     def upsert_extraction(self, source_id: int, extraction: Extraction) -> None:
+        # Track both node IDs and node types to detect collisions
         ids: dict[str, int] = {}
+        types: dict[str, str] = {}
+
+        # Check for same-name different-type collision in extraction.nodes
         for n in extraction.nodes:
+            if n.name in types and types[n.name] != n.type:
+                raise ExtractionError(
+                    f"Node name collision: '{n.name}' appears with type '{types[n.name]}' "
+                    f"and type '{n.type}' in the same extraction"
+                )
+            types[n.name] = n.type
             ids[n.name] = self._node_id(n.type, n.name, n.description)
+
         for e in extraction.edges:
-            src = ids.get(e.source_name) or self._node_id("Concept", e.source_name, "")
-            tgt = ids.get(e.target_name) or self._node_id("Concept", e.target_name, "")
+            src_id = ids.get(e.source_name)
+            if src_id is None:
+                src_id = self._node_id("Concept", e.source_name, "")
+
+            tgt_id = ids.get(e.target_name)
+            if tgt_id is None:
+                tgt_id = self._node_id("Concept", e.target_name, "")
+
             self._conn.execute(
                 "INSERT INTO edges(source_node, target_node, type, source_id, quote) VALUES (?, ?, ?, ?, ?)",
-                (src, tgt, e.type, source_id, e.quote),
+                (src_id, tgt_id, e.type, source_id, e.quote),
             )
         for t in extraction.proposed_node_types:
             self._conn.execute("INSERT OR IGNORE INTO node_types(name, pending) VALUES (?, 1)", (t,))
