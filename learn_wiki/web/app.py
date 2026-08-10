@@ -14,16 +14,19 @@ def create_app(store: GraphStore, extractor: Extractor, ingest_fn=default_ingest
 
     @app.post("/ingest")
     def ingest_endpoint(body: dict):
-        url = body.get("url", "").strip()
+        url_raw = body.get("url", "")
+        if not isinstance(url_raw, str):
+            return JSONResponse({"error": "url must be a string"}, status_code=422)
+        url = url_raw.strip()
         if not url:
             return JSONResponse({"error": "no url provided"}, status_code=422)
         try:
             doc = ingest_fn(url)
             extraction = extractor.extract(doc)
+            source_id = store.upsert_source(doc)
+            store.upsert_extraction(source_id, extraction)
         except LearnWikiError as exc:
             return JSONResponse({"error": str(exc)}, status_code=422)
-        source_id = store.upsert_source(doc)
-        store.upsert_extraction(source_id, extraction)
         return {"status": "ok", "nodes": len(extraction.nodes), "edges": len(extraction.edges)}
 
     @app.get("/graph")
