@@ -104,6 +104,21 @@ def create_app(store: GraphStore, extractor: Extractor, ingest_fn=default_ingest
     def index():
         return FileResponse(_STATIC / "index.html")
 
+    @app.get("/api/entities")
+    def entities_endpoint():
+        return store.list_entities()
+
+    @app.get("/api/entity/{node_id}")
+    def entity_endpoint(node_id: int):
+        detail = store.entity_detail(node_id)
+        if detail is None:
+            return JSONResponse({"error": f"entity {node_id} not found"}, status_code=404)
+        return detail
+
+    @app.get("/wiki")
+    def wiki_page():
+        return FileResponse(_STATIC / "wiki.html")
+
     app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
 
     return app
