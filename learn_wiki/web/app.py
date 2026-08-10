@@ -1,6 +1,7 @@
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from learn_wiki.graph.store import GraphStore
 from learn_wiki.extract.base import Extractor
 from learn_wiki.ingest import ingest as default_ingest
@@ -36,5 +37,7 @@ def create_app(store: GraphStore, extractor: Extractor, ingest_fn=default_ingest
     @app.get("/")
     def index():
         return FileResponse(_STATIC / "index.html")
+
+    app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
 
     return app

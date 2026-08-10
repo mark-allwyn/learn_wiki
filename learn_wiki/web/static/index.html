@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Knowledge Graph Wiki</title>
+  <script src="/static/cytoscape.min.js"></script>
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; }
+    #bar { padding: 8px; display: flex; gap: 8px; border-bottom: 1px solid #ddd; }
+    #url { flex: 1; padding: 6px; }
+    #cy { width: 100vw; height: calc(100vh - 90px); }
+    #status { padding: 4px 8px; color: #555; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div id="bar">
+    <input id="url" placeholder="Paste a URL (web page or YouTube link)" />
+    <button id="go">Ingest</button>
+  </div>
+  <div id="status"></div>
+  <div id="cy"></div>
+  <script>
+    const COLORS = {
+      Technique: "#2b8cbe", Concept: "#41ab5d", Model: "#e6550d", Tool: "#756bb1",
+      Person: "#d94801", Pattern: "#31a354", Pitfall: "#d7301f",
+    };
+    const cy = cytoscape({
+      container: document.getElementById("cy"),
+      style: [
+        { selector: "node", style: {
+            "label": "data(name)", "background-color": ele => COLORS[ele.data("type")] || "#888",
+            "color": "#fff", "text-outline-width": 2, "text-outline-color": "#333", "font-size": 11 } },
+        { selector: "edge", style: {
+            "label": "data(type)", "curve-style": "bezier", "target-arrow-shape": "triangle",
+            "width": 1.5, "line-color": "#bbb", "target-arrow-color": "#bbb", "font-size": 9 } },
+      ],
+      layout: { name: "cose" },
+    });
+
+    async function loadGraph() {
+      const g = await (await fetch("/graph")).json();
+      const els = [];
+      for (const n of g.nodes)
+        els.push({ data: { id: String(n.id), name: n.name, type: n.type, description: n.description } });
+      for (const e of g.edges)
+        els.push({ data: { source: String(e.source), target: String(e.target), type: e.type, quote: e.quote } });
+      cy.elements().remove();
+      cy.add(els);
+      cy.layout({ name: "cose" }).run();
+    }
+
+    cy.on("tap", "edge", ev => {
+      document.getElementById("status").textContent = "Source: " + ev.target.data("quote");
+    });
+
+    document.getElementById("go").onclick = async () => {
+      const url = document.getElementById("url").value.trim();
+      if (!url) return;
+      const status = document.getElementById("status");
+      status.textContent = "Ingesting ...";
+      const r = await fetch("/ingest", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const data = await r.json();
+      status.textContent = r.ok
+        ? `Added ${data.nodes} nodes, ${data.edges} edges.`
+        : `Error: ${data.error}`;
+      if (r.ok) { document.getElementById("url").value = ""; await loadGraph(); }
+    };
+
+    loadGraph();
+  </script>
+</body>
+</html>
