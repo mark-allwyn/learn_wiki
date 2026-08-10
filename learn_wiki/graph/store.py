@@ -50,19 +50,23 @@ class GraphStore:
 
     def upsert_source(self, doc: SourceDocument) -> int:
         with self._lock:
-            cur = self._conn.execute(
-                """INSERT INTO sources(url, type, title, raw_text) VALUES (?, ?, ?, ?)
-                   ON CONFLICT(url) DO UPDATE SET
-                       type=excluded.type, title=excluded.title, raw_text=excluded.raw_text,
-                       fetched_at=datetime('now')
-                   RETURNING id""",
-                (doc.url, doc.source_type, doc.title, doc.text),
-            )
-            source_id = cur.fetchone()["id"]
-            # Idempotency: drop this source's prior edges before re-adding.
-            self._conn.execute("DELETE FROM edges WHERE source_id = ?", (source_id,))
-            self._conn.commit()
-            return source_id
+            try:
+                cur = self._conn.execute(
+                    """INSERT INTO sources(url, type, title, raw_text) VALUES (?, ?, ?, ?)
+                       ON CONFLICT(url) DO UPDATE SET
+                           type=excluded.type, title=excluded.title, raw_text=excluded.raw_text,
+                           fetched_at=datetime('now')
+                       RETURNING id""",
+                    (doc.url, doc.source_type, doc.title, doc.text),
+                )
+                source_id = cur.fetchone()["id"]
+                # Idempotency: drop this source's prior edges before re-adding.
+                self._conn.execute("DELETE FROM edges WHERE source_id = ?", (source_id,))
+                self._conn.commit()
+                return source_id
+            except Exception:
+                self._conn.rollback()
+                raise
 
     def _node_id(self, type_: str, name: str, description: str) -> int:
         cur = self._conn.execute(
@@ -75,38 +79,42 @@ class GraphStore:
 
     def upsert_extraction(self, source_id: int, extraction: Extraction) -> None:
         with self._lock:
-            # Track both node IDs and node types to detect collisions
-            ids: dict[str, int] = {}
-            types: dict[str, str] = {}
+            try:
+                # Track both node IDs and node types to detect collisions
+                ids: dict[str, int] = {}
+                types: dict[str, str] = {}
 
-            # Check for same-name different-type collision in extraction.nodes
-            for n in extraction.nodes:
-                if n.name in types and types[n.name] != n.type:
-                    raise ExtractionError(
-                        f"Node name collision: '{n.name}' appears with type '{types[n.name]}' "
-                        f"and type '{n.type}' in the same extraction"
+                # Check for same-name different-type collision in extraction.nodes
+                for n in extraction.nodes:
+                    if n.name in types and types[n.name] != n.type:
+                        raise ExtractionError(
+                            f"Node name collision: '{n.name}' appears with type '{types[n.name]}' "
+                            f"and type '{n.type}' in the same extraction"
+                        )
+                    types[n.name] = n.type
+                    ids[n.name] = self._node_id(n.type, n.name, n.description)
+
+                for e in extraction.edges:
+                    src_id = ids.get(e.source_name)
+                    if src_id is None:
+                        src_id = self._node_id("Concept", e.source_name, "")
+
+                    tgt_id = ids.get(e.target_name)
+                    if tgt_id is None:
+                        tgt_id = self._node_id("Concept", e.target_name, "")
+
+                    self._conn.execute(
+                        "INSERT INTO edges(source_node, target_node, type, source_id, quote) VALUES (?, ?, ?, ?, ?)",
+                        (src_id, tgt_id, e.type, source_id, e.quote),
                     )
-                types[n.name] = n.type
-                ids[n.name] = self._node_id(n.type, n.name, n.description)
-
-            for e in extraction.edges:
-                src_id = ids.get(e.source_name)
-                if src_id is None:
-                    src_id = self._node_id("Concept", e.source_name, "")
-
-                tgt_id = ids.get(e.target_name)
-                if tgt_id is None:
-                    tgt_id = self._node_id("Concept", e.target_name, "")
-
-                self._conn.execute(
-                    "INSERT INTO edges(source_node, target_node, type, source_id, quote) VALUES (?, ?, ?, ?, ?)",
-                    (src_id, tgt_id, e.type, source_id, e.quote),
-                )
-            for t in extraction.proposed_node_types:
-                self._conn.execute("INSERT OR IGNORE INTO node_types(name, pending) VALUES (?, 1)", (t,))
-            for t in extraction.proposed_edge_types:
-                self._conn.execute("INSERT OR IGNORE INTO edge_types(name, pending) VALUES (?, 1)", (t,))
-            self._conn.commit()
+                for t in extraction.proposed_node_types:
+                    self._conn.execute("INSERT OR IGNORE INTO node_types(name, pending) VALUES (?, 1)", (t,))
+                for t in extraction.proposed_edge_types:
+                    self._conn.execute("INSERT OR IGNORE INTO edge_types(name, pending) VALUES (?, 1)", (t,))
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
 
     def get_graph(self) -> dict:
         with self._lock:

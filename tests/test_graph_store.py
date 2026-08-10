@@ -81,6 +81,25 @@ def test_empty_quote_raises_error():
         ))
 
 
+def test_failed_extraction_does_not_leak_orphan_nodes():
+    """A failed upsert_extraction must not leave uncommitted rows for a later
+    successful commit to silently flush into the graph."""
+    store = make_store()
+    sid = store.upsert_source(SourceDocument("https://x", "web", "T", "text"))
+    with pytest.raises(ExtractionError):
+        store.upsert_extraction(sid, Extraction(
+            nodes=[ExtractedNode("Concept", "A", "d"),
+                   ExtractedNode("Technique", "A", "d")],
+            edges=[],
+        ))
+    # A later, valid extraction commits successfully.
+    store.upsert_extraction(sid, Extraction(
+        nodes=[ExtractedNode("Concept", "B", "d")], edges=[]))
+    g = store.get_graph()
+    names = {n["name"] for n in g["nodes"]}
+    assert names == {"B"}  # "A" must not have leaked in via the next commit
+
+
 def test_whitespace_only_quote_raises_error():
     """Edge quotes must be non-empty (whitespace-only is considered empty)."""
     store = make_store()
