@@ -16,7 +16,7 @@ def validate_extraction(raw: dict) -> Extraction:
         edges = []
         for e in raw["edges"]:
             quote = e["quote"]
-            if not quote or not quote.strip():
+            if not isinstance(quote, str) or not quote.strip():
                 raise ExtractionError(f"edge {e.get('source_name')}->{e.get('target_name')} has no quote")
             edges.append(ExtractedEdge(
                 source_name=e["source_name"], target_name=e["target_name"],

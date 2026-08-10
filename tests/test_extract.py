@@ -34,3 +34,44 @@ def test_fake_extractor_returns_canned():
     fake = FakeExtractor(canned)
     out = fake.extract(SourceDocument("u", "web", "t", "body"))
     assert out is canned
+
+
+def test_validate_rejects_non_string_quote():
+    """Regression: non-string quote (e.g. 123) must raise ExtractionError."""
+    raw = {
+        "nodes": [{"type": "Concept", "name": "A", "description": "d"}],
+        "edges": [{"source_name": "A", "target_name": "A", "type": "requires", "quote": 123}],
+    }
+    with pytest.raises(ExtractionError):
+        validate_extraction(raw)
+
+
+def test_validate_accepts_node_without_description():
+    """Regression: node without description is optional and defaults to empty string."""
+    raw = {
+        "nodes": [{"type": "Concept", "name": "A"}],
+        "edges": [],
+    }
+    ex = validate_extraction(raw)
+    assert ex.nodes[0].name == "A"
+    assert ex.nodes[0].description == ""
+
+
+def test_validate_rejects_node_missing_type():
+    """Regression: node missing required type field must raise ExtractionError."""
+    raw = {
+        "nodes": [{"name": "A", "description": "d"}],
+        "edges": [],
+    }
+    with pytest.raises(ExtractionError):
+        validate_extraction(raw)
+
+
+def test_validate_rejects_node_missing_name():
+    """Regression: node missing required name field must raise ExtractionError."""
+    raw = {
+        "nodes": [{"type": "Concept", "description": "d"}],
+        "edges": [],
+    }
+    with pytest.raises(ExtractionError):
+        validate_extraction(raw)
