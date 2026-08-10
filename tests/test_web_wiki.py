@@ -46,3 +46,12 @@ def test_index_includes_nav():
     assert r.status_code == 200
     assert "/static/nav.js" in r.text
     assert 'id="nav"' in r.text
+
+
+def test_wiki_page_served():
+    client, _ = build_client()
+    r = client.get("/wiki")
+    assert r.status_code == 200
+    assert "/static/nav.js" in r.text
+    assert "/api/entity/" in r.text     # entity detail fetch
+    assert "/api/entities" in r.text    # index fetch
