@@ -62,10 +62,11 @@ def create_app(store: GraphStore, extractor: Extractor, ingest_fn=default_ingest
         url = url_raw.strip()
         if not url:
             return JSONResponse({"error": "no url provided"}, status_code=422)
+        fast = bool(body.get("fast", False))
         t0 = time.monotonic()
-        logger.info("ingest: START %s", url)
+        logger.info("ingest: START %s (fast=%s)", url, fast)
         try:
-            doc = ingest_fn(url)
+            doc = ingest_fn(url, prefer_captions=fast)
             t1 = time.monotonic()
             logger.info(
                 "ingest: fetched [%s] '%s' (%d chars) in %.1fs",

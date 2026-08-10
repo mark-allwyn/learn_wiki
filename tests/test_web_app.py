@@ -14,7 +14,7 @@ def build_client():
         edges=[ExtractedEdge("Chunking", "Context window", "improves", "chunking improves it")],
     )
     extractor = FakeExtractor(extraction)
-    fake_ingest = lambda url: SourceDocument(url, "web", "T", "body text")
+    fake_ingest = lambda url, prefer_captions=False: SourceDocument(url, "web", "T", "body text")
     app = create_app(store, extractor, ingest_fn=fake_ingest)
     return TestClient(app)
 
@@ -46,7 +46,7 @@ def test_ingest_error_returns_422():
     store.init_schema()
     from learn_wiki.errors import IngestError
 
-    def boom(url):
+    def boom(url, prefer_captions=False):
         raise IngestError("dead link")
 
     app = create_app(store, FakeExtractor(Extraction([], [])), ingest_fn=boom)
@@ -68,7 +68,7 @@ def test_store_collision_error_returns_422():
         edges=[],
     )
     extractor = FakeExtractor(extraction)
-    fake_ingest = lambda url: SourceDocument(url, "web", "T", "body text")
+    fake_ingest = lambda url, prefer_captions=False: SourceDocument(url, "web", "T", "body text")
     app = create_app(store, extractor, ingest_fn=fake_ingest)
     client = TestClient(app)
 
@@ -99,3 +99,21 @@ def test_empty_url_returns_422():
     r = client.post("/ingest", json={"url": ""})
     assert r.status_code == 422
     assert "error" in r.json()
+
+
+def test_fast_flag_threaded_as_prefer_captions():
+    """The page's 'fast' flag reaches ingest as prefer_captions."""
+    store = GraphStore(":memory:")
+    store.init_schema()
+    seen = {}
+
+    def rec_ingest(url, prefer_captions=False):
+        seen["prefer_captions"] = prefer_captions
+        return SourceDocument(url, "video", "T", "body")
+
+    app = create_app(store, FakeExtractor(Extraction([], [])), ingest_fn=rec_ingest)
+    client = TestClient(app)
+    client.post("/ingest", json={"url": "https://youtu.be/x", "fast": True})
+    assert seen["prefer_captions"] is True
+    client.post("/ingest", json={"url": "https://youtu.be/x", "fast": False})
+    assert seen["prefer_captions"] is False

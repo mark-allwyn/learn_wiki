@@ -3,27 +3,33 @@
 <head>
   <meta charset="utf-8" />
   <title>Knowledge Graph Wiki</title>
-  <script src="/static/cytoscape.min.js"></script>
+  <script src="/static/3d-force-graph.min.js"></script>
   <style>
-    html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
+    html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; background: #0b0e14; color: #e6e9ef; }
     body { display: flex; flex-direction: column; }
-    #bar { padding: 8px; display: flex; gap: 8px; border-bottom: 1px solid #ddd; flex: 0 0 auto; }
-    #url { flex: 1; padding: 6px; }
-    #go { padding: 6px 14px; }
-    #status { padding: 4px 8px; color: #555; font-size: 13px; border-bottom: 1px solid #eee; flex: 0 0 auto; min-height: 18px; }
-    #main { flex: 1 1 auto; display: flex; min-height: 0; }
-    #logpanel { flex: 0 0 360px; display: flex; flex-direction: column; border-right: 1px solid #ddd; background: #1e1e1e; }
-    #logpanel h2 { margin: 0; padding: 6px 10px; font-size: 12px; font-weight: 600; color: #aaa; letter-spacing: .04em; text-transform: uppercase; border-bottom: 1px solid #333; }
-    #log { flex: 1 1 auto; overflow-y: auto; padding: 8px 10px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; line-height: 1.5; color: #ddd; white-space: pre-wrap; word-break: break-word; }
-    #log .start { color: #7fb3ff; }
+    #bar { padding: 8px 10px; display: flex; gap: 10px; align-items: center; background: #11151f; border-bottom: 1px solid #1e2430; flex: 0 0 auto; }
+    #url { flex: 1; padding: 7px 9px; background: #0b0e14; border: 1px solid #2a3140; border-radius: 6px; color: #e6e9ef; }
+    #go { padding: 7px 16px; background: #2f6feb; color: #fff; border: 0; border-radius: 6px; cursor: pointer; font-weight: 600; }
+    #go:hover { background: #4b83f0; }
+    .fast { font-size: 13px; color: #aab2c0; display: flex; align-items: center; gap: 5px; white-space: nowrap; cursor: pointer; }
+    #status { padding: 5px 10px; color: #aab2c0; font-size: 13px; background: #11151f; border-bottom: 1px solid #1e2430; flex: 0 0 auto; min-height: 18px; }
+    #main { flex: 1 1 auto; display: flex; min-height: 0; position: relative; }
+    #logpanel { flex: 0 0 340px; display: flex; flex-direction: column; border-right: 1px solid #1e2430; background: #0d1017; }
+    #logpanel h2 { margin: 0; padding: 7px 10px; font-size: 11px; font-weight: 600; color: #8892a0; letter-spacing: .06em; text-transform: uppercase; border-bottom: 1px solid #1e2430; }
+    #log { flex: 1 1 auto; overflow-y: auto; padding: 8px 10px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; line-height: 1.55; color: #c9d1e0; white-space: pre-wrap; word-break: break-word; }
+    #log .start { color: #79b8ff; }
     #log .done { color: #7ee787; }
     #log .fail { color: #ff7b72; }
-    #cy { flex: 1 1 auto; min-width: 0; }
+    #graph { flex: 1 1 auto; min-width: 0; }
+    #legend { position: absolute; top: 10px; right: 10px; background: rgba(13,16,23,.82); border: 1px solid #1e2430; border-radius: 8px; padding: 8px 10px; font-size: 12px; color: #c9d1e0; }
+    #legend .row { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+    #legend .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
   </style>
 </head>
 <body>
   <div id="bar">
     <input id="url" placeholder="Paste a URL (web page or YouTube link)" />
+    <label class="fast"><input type="checkbox" id="fast" checked /> fast (captions for video)</label>
     <button id="go">Ingest</button>
   </div>
   <div id="status"></div>
@@ -32,41 +38,62 @@
       <h2>Ingest log</h2>
       <div id="log"></div>
     </div>
-    <div id="cy"></div>
+    <div id="graph"></div>
+    <div id="legend"></div>
   </div>
   <script>
     const COLORS = {
-      Technique: "#2b8cbe", Concept: "#41ab5d", Model: "#e6550d", Tool: "#756bb1",
-      Person: "#d94801", Pattern: "#31a354", Pitfall: "#d7301f",
+      Technique: "#4ea1ff", Concept: "#3fb950", Model: "#f0883e", Tool: "#a371f7",
+      Person: "#db6d28", Pattern: "#2ea043", Pitfall: "#f85149",
     };
-    const cy = cytoscape({
-      container: document.getElementById("cy"),
-      style: [
-        { selector: "node", style: {
-            "label": "data(name)", "background-color": ele => COLORS[ele.data("type")] || "#888",
-            "color": "#fff", "text-outline-width": 2, "text-outline-color": "#333", "font-size": 11 } },
-        { selector: "edge", style: {
-            "label": "data(type)", "curve-style": "bezier", "target-arrow-shape": "triangle",
-            "width": 1.5, "line-color": "#bbb", "target-arrow-color": "#bbb", "font-size": 9 } },
-      ],
-      layout: { name: "cose" },
-    });
+    const statusEl = document.getElementById("status");
+    const urlEl = document.getElementById("url");
+    const graphEl = document.getElementById("graph");
+
+    // Legend
+    const legend = document.getElementById("legend");
+    for (const [type, color] of Object.entries(COLORS)) {
+      const row = document.createElement("div");
+      row.className = "row";
+      row.innerHTML = `<span class="dot" style="background:${color}"></span>${type}`;
+      legend.appendChild(row);
+    }
+
+    const Graph = ForceGraph3D()(graphEl)
+      .backgroundColor("#0b0e14")
+      .showNavInfo(false)
+      .nodeLabel(n => `<div style="background:#11151f;padding:4px 7px;border-radius:5px;border:1px solid #2a3140"><b>${n.name}</b><br><span style="opacity:.7">${n.type}</span></div>`)
+      .nodeColor(n => COLORS[n.type] || "#8892a0")
+      .nodeOpacity(0.95)
+      .nodeRelSize(5)
+      .linkColor(() => "rgba(160,175,200,0.28)")
+      .linkWidth(0.5)
+      .linkLabel(l => l.type)
+      .linkDirectionalArrowLength(3)
+      .linkDirectionalArrowRelPos(1)
+      .linkDirectionalParticles(2)
+      .linkDirectionalParticleSpeed(0.006)
+      .linkDirectionalParticleWidth(1.3)
+      .onNodeClick(n => {
+        statusEl.textContent = n.name + " [" + n.type + "]" + (n.description ? " - " + n.description : "");
+        // ease camera toward the clicked node
+        const d = 90;
+        const r = 1 + d / Math.hypot(n.x || 1, n.y || 1, n.z || 1);
+        Graph.cameraPosition({ x: (n.x || 0) * r, y: (n.y || 0) * r, z: (n.z || 0) * r }, n, 800);
+      })
+      .onLinkClick(l => {
+        statusEl.textContent = "Source: " + (l.quote || "(no quote)");
+      });
+
+    function sizeGraph() { Graph.width(graphEl.clientWidth).height(graphEl.clientHeight); }
+    requestAnimationFrame(sizeGraph);
+    window.addEventListener("resize", sizeGraph);
 
     async function loadGraph() {
       const g = await (await fetch("/graph")).json();
-      const els = [];
-      for (const n of g.nodes)
-        els.push({ data: { id: String(n.id), name: n.name, type: n.type, description: n.description } });
-      for (const e of g.edges)
-        els.push({ data: { source: String(e.source), target: String(e.target), type: e.type, quote: e.quote } });
-      cy.elements().remove();
-      cy.add(els);
-      cy.layout({ name: "cose" }).run();
+      const links = g.edges.map(e => ({ source: e.source, target: e.target, type: e.type, quote: e.quote }));
+      Graph.graphData({ nodes: g.nodes, links });
     }
-
-    cy.on("tap", "edge", ev => {
-      document.getElementById("status").textContent = "Source: " + ev.target.data("quote");
-    });
 
     const logEl = document.getElementById("log");
     function appendLog(line) {
@@ -91,22 +118,22 @@
     pollLogs();
 
     document.getElementById("go").onclick = async () => {
-      const url = document.getElementById("url").value.trim();
+      const url = urlEl.value.trim();
       if (!url) return;
-      const status = document.getElementById("status");
-      status.textContent = "Ingesting ...";
+      const fast = document.getElementById("fast").checked;
+      statusEl.textContent = "Ingesting ...";
       try {
         const r = await fetch("/ingest", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url }),
+          body: JSON.stringify({ url, fast }),
         });
         const data = await r.json();
-        status.textContent = r.ok
+        statusEl.textContent = r.ok
           ? `Added ${data.nodes} nodes, ${data.edges} edges.`
           : `Error: ${data.error}`;
-        if (r.ok) { document.getElementById("url").value = ""; await loadGraph(); }
+        if (r.ok) { urlEl.value = ""; await loadGraph(); }
       } catch (e) {
-        status.textContent = "Request failed: " + e;
+        statusEl.textContent = "Request failed: " + e;
       }
       await pollLogs();
     };
