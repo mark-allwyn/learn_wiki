@@ -38,3 +38,11 @@ def test_api_entity_detail_and_404():
     missing = client.get("/api/entity/99999")
     assert missing.status_code == 404
     assert "error" in missing.json()
+
+
+def test_index_includes_nav():
+    client, _ = build_client()
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "/static/nav.js" in r.text
+    assert 'id="nav"' in r.text
