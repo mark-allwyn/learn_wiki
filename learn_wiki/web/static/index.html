@@ -24,11 +24,11 @@
 
     #graph { flex: 1 1 auto; min-width: 0; }
 
-    .panel { position: absolute; background: color-mix(in oklab, var(--surface-2) 82%, transparent); border: 1px solid var(--border); border-radius: var(--radius); backdrop-filter: blur(6px); box-shadow: var(--shadow-1); }
+    .panel { position: absolute; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-1); }
     #legend { top: 16px; right: 16px; padding: 12px 14px; }
     #legend .lt { font-size: .64rem; letter-spacing: .16em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 8px; }
     #legend .row { display: flex; align-items: center; gap: 8px; margin: 4px 0; font-size: .8rem; color: var(--text-dim); }
-    #legend .dot { width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 8px currentColor; }
+    #legend .dot { width: 9px; height: 9px; border-radius: 50%; }
     #zoom { left: 16px; bottom: 16px; display: flex; flex-direction: column; overflow: hidden; padding: 0; }
     #zoom button { width: 38px; height: 38px; font-size: 20px; color: var(--text-dim); background: transparent; border: 0; border-radius: 0; }
     #zoom button:first-child { border-bottom: 1px solid var(--border); }
@@ -76,21 +76,18 @@
     }
 
     const Graph = ForceGraph3D()(graphEl)
-      .backgroundColor("#080a0f")
+      .backgroundColor("#0e0f13")
       .showNavInfo(false)
-      .nodeLabel(n => `<div style="font-family:'Hanken Grotesk',sans-serif;background:#141925;color:#e9ecf4;padding:6px 10px;border-radius:8px;border:1px solid #2e3850;box-shadow:0 8px 24px rgba(0,0,0,.5)"><b>${n.name}</b><br><span style="opacity:.6;font-size:.85em">${n.type}</span></div>`)
+      .nodeLabel(n => `<div style="font-family:'Plus Jakarta Sans',sans-serif;background:#191c23;color:#e9ebf0;padding:6px 10px;border-radius:8px;border:1px solid #333844;box-shadow:0 8px 24px rgba(0,0,0,.5)"><b>${n.name}</b><br><span style="opacity:.6;font-size:.85em">${n.type}</span></div>`)
       .nodeColor(n => COLORS[n.type] || "#8892a0")
-      .nodeOpacity(0.92)
+      .nodeOpacity(1)
       .nodeRelSize(4.5)
-      .linkColor(() => "#41506e")
-      .linkWidth(0.8)
+      .linkColor(() => "#9aa1b0")
+      .linkOpacity(0.85)
+      .linkWidth(1.2)
       .linkLabel(l => l.type)
-      .linkDirectionalArrowLength(2.8)
+      .linkDirectionalArrowLength(3.2)
       .linkDirectionalArrowRelPos(1)
-      .linkDirectionalParticles(2)
-      .linkDirectionalParticleSpeed(0.006)
-      .linkDirectionalParticleWidth(1.2)
-      .linkDirectionalParticleColor(() => "#8aa0c8")
       .onNodeClick(n => {
         statusEl.textContent = n.name + " [" + n.type + "]" + (n.description ? " - " + n.description : "");
         const r = 1 + 90 / Math.hypot(n.x || 1, n.y || 1, n.z || 1);
