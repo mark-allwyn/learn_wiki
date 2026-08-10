@@ -22,14 +22,15 @@
     #log .done { color: var(--t-concept); }
     #log .fail { color: var(--t-pitfall); }
 
-    #graph { flex: 1 1 auto; min-width: 0; }
+    #graphwrap { flex: 1 1 auto; min-width: 0; position: relative; }
+    #graph { position: absolute; inset: 0; }
 
     .panel { position: absolute; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-1); }
     #legend { top: 16px; right: 16px; padding: 12px 14px; }
     #legend .lt { font-size: .64rem; letter-spacing: .16em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 8px; }
     #legend .row { display: flex; align-items: center; gap: 8px; margin: 4px 0; font-size: .8rem; color: var(--text-dim); }
     #legend .dot { width: 9px; height: 9px; border-radius: 50%; }
-    #zoom { left: 16px; bottom: 16px; display: flex; flex-direction: column; overflow: hidden; padding: 0; }
+    #zoom { right: 16px; bottom: 16px; display: flex; flex-direction: column; overflow: hidden; padding: 0; }
     #zoom button { width: 38px; height: 38px; font-size: 20px; color: var(--text-dim); background: transparent; border: 0; border-radius: 0; }
     #zoom button:first-child { border-bottom: 1px solid var(--border); }
     #zoom button:hover { background: var(--surface-3); color: var(--text); }
@@ -52,10 +53,12 @@
       <h2>Ingest log</h2>
       <div id="log"></div>
     </div>
-    <div id="graph"></div>
-    <div id="legend" class="panel"></div>
-    <div id="zoom" class="panel"><button id="zoomIn" title="Zoom in">+</button><button id="zoomOut" title="Zoom out">&minus;</button></div>
-    <div id="viewctl" class="panel"><label><input type="checkbox" id="edgesToggle" checked /> Edges</label></div>
+    <div id="graphwrap">
+      <div id="graph"></div>
+      <div id="legend" class="panel"></div>
+      <div id="viewctl" class="panel"><label><input type="checkbox" id="edgesToggle" checked /> Edges</label></div>
+      <div id="zoom" class="panel"><button id="zoomIn" title="Zoom in">+</button><button id="zoomOut" title="Zoom out">&minus;</button></div>
+    </div>
   </div>
   <script>
     const COLORS = {
