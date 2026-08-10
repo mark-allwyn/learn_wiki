@@ -1,0 +1,23 @@
+[project]
+name = "learn_wiki"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx",
+    "trafilatura",
+    "yt-dlp",
+    "faster-whisper",
+    "youtube-transcript-api",
+    "claude-agent-sdk",
+    "fastapi",
+    "uvicorn",
+    "networkx",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--ignore=tests/smoke"
+asyncio_mode = "auto"
