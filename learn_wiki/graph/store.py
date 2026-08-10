@@ -128,5 +128,69 @@ class GraphStore:
             ]
             return {"nodes": nodes, "edges": edges}
 
+    def list_entities(self) -> list:
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT n.id, n.type, n.name, n.description,
+                       (SELECT COUNT(*) FROM edges e
+                        WHERE e.source_node = n.id OR e.target_node = n.id) AS degree
+                FROM nodes n
+                ORDER BY n.type, n.name
+                """
+            ).fetchall()
+        return [
+            {"id": r["id"], "type": r["type"], "name": r["name"],
+             "description": r["description"], "degree": r["degree"]}
+            for r in rows
+        ]
+
+    def entity_detail(self, node_id: int):
+        with self._lock:
+            node = self._conn.execute(
+                "SELECT id, type, name, description FROM nodes WHERE id = ?", (node_id,)
+            ).fetchone()
+            if node is None:
+                return None
+            rows = self._conn.execute(
+                """
+                SELECT 'out' AS direction, e.type AS type, e.quote AS quote,
+                       n2.id AS other_id, n2.name AS other_name, n2.type AS other_type,
+                       s.url AS source_url, s.title AS source_title
+                FROM edges e
+                JOIN nodes n2 ON n2.id = e.target_node
+                JOIN sources s ON s.id = e.source_id
+                WHERE e.source_node = ?
+                UNION ALL
+                SELECT 'in', e.type, e.quote,
+                       n2.id, n2.name, n2.type, s.url, s.title
+                FROM edges e
+                JOIN nodes n2 ON n2.id = e.source_node
+                JOIN sources s ON s.id = e.source_id
+                WHERE e.target_node = ?
+                ORDER BY type, other_name
+                """,
+                (node_id, node_id),
+            ).fetchall()
+        relationships = [
+            {"direction": r["direction"], "type": r["type"],
+             "other": {"id": r["other_id"], "name": r["other_name"], "type": r["other_type"]},
+             "quote": r["quote"], "source_url": r["source_url"], "source_title": r["source_title"]}
+            for r in rows
+        ]
+        sources = []
+        seen = set()
+        for r in relationships:
+            key = r["source_url"]
+            if key not in seen:
+                seen.add(key)
+                sources.append({"url": r["source_url"], "title": r["source_title"]})
+        return {
+            "node": {"id": node["id"], "type": node["type"],
+                     "name": node["name"], "description": node["description"]},
+            "relationships": relationships,
+            "sources": sources,
+        }
+
     def close(self) -> None:
         self._conn.close()

@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <title>Knowledge Graph Wiki</title>
   <script src="/static/3d-force-graph.min.js"></script>
+  <script defer src="/static/nav.js"></script>
   <style>
     html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; background: #0b0e14; color: #e6e9ef; }
     body { display: flex; flex-direction: column; }
@@ -32,6 +33,7 @@
   </style>
 </head>
 <body>
+  <div id="nav"></div>
   <div id="bar">
     <input id="url" placeholder="Paste a URL (web page or YouTube link)" />
     <label class="fast"><input type="checkbox" id="fast" checked /> fast (captions for video)</label>
