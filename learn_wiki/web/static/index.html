@@ -22,8 +22,8 @@
     #log .done { color: var(--t-concept); }
     #log .fail { color: var(--t-pitfall); }
 
-    #graphwrap { flex: 1 1 auto; min-width: 0; position: relative; }
-    #graph { position: absolute; inset: 0; }
+    #graphwrap { flex: 1 1 auto; min-width: 0; min-height: 0; position: relative; display: flex; }
+    #graph { flex: 1 1 auto; min-width: 0; }
 
     .panel { position: absolute; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-1); }
     #legend { top: 16px; right: 16px; padding: 12px 14px; }
