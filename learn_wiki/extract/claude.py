@@ -49,18 +49,36 @@ def parse_response(text: str) -> Extraction:
     return validate_extraction(raw)
 
 
-async def _run_claude(prompt: str) -> str:
-    # Verified against the installed claude-agent-sdk (0.2.134): assistant
-    # text is not exposed as `message.text`. `query()` yields Message
-    # objects; only `AssistantMessage` carries a `.content` list of
-    # `ContentBlock`s, and only `TextBlock` (one of several block variants)
-    # has a `.text` attribute. Other message types (SystemMessage,
-    # ResultMessage, ...) and other block types (ToolUseBlock, ...) are
-    # skipped.
+# Minimal system prompt. Passing a plain string replaces Claude Code's large
+# default coding-agent system prompt, which cuts input tokens and steers the
+# model straight at the one-shot extraction task instead of agentic behavior.
+_SYSTEM_PROMPT = (
+    "You are a knowledge-graph extractor. Read the document in the user message "
+    "and reply with only a single JSON object in the shape it requests. Do not "
+    "use tools, do not plan or think out loud, do not explain - output the JSON "
+    "object and nothing else."
+)
+
+
+async def _run_claude(prompt: str, *, model, effort) -> str:
+    # Verified against the installed claude-agent-sdk (0.2.134): assistant text
+    # is not exposed as `message.text`. `query()` yields Message objects; only
+    # `AssistantMessage` carries a `.content` list of `ContentBlock`s, and only
+    # `TextBlock` has a `.text` attribute. Other message/block types are skipped.
+    #
+    # Options are tuned for a fast one-shot extraction rather than an agent run:
+    # a single turn, no tools, low effort, and a minimal system prompt.
     from claude_agent_sdk import query, ClaudeAgentOptions, AssistantMessage, TextBlock
 
+    options = ClaudeAgentOptions(
+        model=model,
+        system_prompt=_SYSTEM_PROMPT,
+        allowed_tools=[],
+        max_turns=1,
+        effort=effort,
+    )
     chunks: list[str] = []
-    async for message in query(prompt=prompt, options=ClaudeAgentOptions()):
+    async for message in query(prompt=prompt, options=options):
         if not isinstance(message, AssistantMessage):
             continue
         for block in message.content:
@@ -70,14 +88,22 @@ async def _run_claude(prompt: str) -> str:
 
 
 class ClaudeExtractor:
-    def __init__(self, model_size_hint: str = ""):
-        self._hint = model_size_hint
+    def __init__(self, model: str = "sonnet", effort: str = "low"):
+        # Runs on the Claude subscription via the Agent SDK. `model` accepts a
+        # Claude Code alias ("sonnet", "haiku", "opus") or a full model id;
+        # `effort` is the thinking/effort level. Defaults favor speed: extraction
+        # against a clear schema does not need Opus-at-high-effort.
+        self._model = model
+        self._effort = effort
 
     def extract(self, doc: SourceDocument) -> Extraction:
         prompt = build_prompt(doc)
-        reply = asyncio.run(_run_claude(prompt))
+        reply = asyncio.run(_run_claude(prompt, model=self._model, effort=self._effort))
         try:
             return parse_response(reply)
         except ExtractionError:
-            reply = asyncio.run(_run_claude(prompt + "\n\nReturn ONLY the JSON object, nothing else."))
+            reply = asyncio.run(_run_claude(
+                prompt + "\n\nReturn ONLY the JSON object, nothing else.",
+                model=self._model, effort=self._effort,
+            ))
             return parse_response(reply)
