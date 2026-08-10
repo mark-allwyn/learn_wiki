@@ -24,6 +24,11 @@
     #legend { position: absolute; top: 10px; right: 10px; background: rgba(13,16,23,.82); border: 1px solid #1e2430; border-radius: 8px; padding: 8px 10px; font-size: 12px; color: #c9d1e0; }
     #legend .row { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
     #legend .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    #zoom { position: absolute; left: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 6px; }
+    #zoom button { width: 34px; height: 34px; font-size: 20px; line-height: 1; color: #e6e9ef; background: rgba(17,21,31,.9); border: 1px solid #2a3140; border-radius: 8px; cursor: pointer; }
+    #zoom button:hover { background: #1b2130; }
+    #viewctl { position: absolute; top: 10px; left: 10px; background: rgba(13,16,23,.82); border: 1px solid #1e2430; border-radius: 8px; padding: 7px 10px; font-size: 13px; color: #c9d1e0; }
+    #viewctl label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -40,6 +45,8 @@
     </div>
     <div id="graph"></div>
     <div id="legend"></div>
+    <div id="zoom"><button id="zoomIn" title="Zoom in">+</button><button id="zoomOut" title="Zoom out">&minus;</button></div>
+    <div id="viewctl"><label><input type="checkbox" id="edgesToggle" checked /> Edges</label></div>
   </div>
   <script>
     const COLORS = {
@@ -88,6 +95,18 @@
     function sizeGraph() { Graph.width(graphEl.clientWidth).height(graphEl.clientHeight); }
     requestAnimationFrame(sizeGraph);
     window.addEventListener("resize", sizeGraph);
+
+    // Zoom buttons: move the camera toward / away from the center.
+    function zoom(factor) {
+      const p = Graph.camera().position;
+      Graph.cameraPosition({ x: p.x * factor, y: p.y * factor, z: p.z * factor }, undefined, 200);
+    }
+    document.getElementById("zoomIn").onclick = () => zoom(0.75);
+    document.getElementById("zoomOut").onclick = () => zoom(1.33);
+
+    // Edges on/off toggle.
+    const edgesToggle = document.getElementById("edgesToggle");
+    edgesToggle.onchange = () => Graph.linkVisibility(edgesToggle.checked);
 
     async function loadGraph() {
       const g = await (await fetch("/graph")).json();
