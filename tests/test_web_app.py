@@ -30,6 +30,17 @@ def test_ingest_then_graph():
     assert g["edges"][0]["quote"] == "chunking improves it"
 
 
+def test_logs_endpoint_captures_ingest_lines():
+    client = build_client()
+    before = client.get("/logs").json()
+    assert "seq" in before and "lines" in before
+    client.post("/ingest", json={"url": "https://blog.example/p"})
+    after = client.get("/logs", params={"after": before["seq"]}).json()
+    joined = "\n".join(after["lines"])
+    assert "ingest:" in joined
+    assert "START" in joined and "DONE" in joined
+
+
 def test_ingest_error_returns_422():
     store = GraphStore(":memory:")
     store.init_schema()

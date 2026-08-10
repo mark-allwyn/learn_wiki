@@ -5,11 +5,20 @@
   <title>Knowledge Graph Wiki</title>
   <script src="/static/cytoscape.min.js"></script>
   <style>
-    body { margin: 0; font-family: system-ui, sans-serif; }
-    #bar { padding: 8px; display: flex; gap: 8px; border-bottom: 1px solid #ddd; }
+    html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
+    body { display: flex; flex-direction: column; }
+    #bar { padding: 8px; display: flex; gap: 8px; border-bottom: 1px solid #ddd; flex: 0 0 auto; }
     #url { flex: 1; padding: 6px; }
-    #cy { width: 100vw; height: calc(100vh - 90px); }
-    #status { padding: 4px 8px; color: #555; font-size: 13px; }
+    #go { padding: 6px 14px; }
+    #status { padding: 4px 8px; color: #555; font-size: 13px; border-bottom: 1px solid #eee; flex: 0 0 auto; min-height: 18px; }
+    #main { flex: 1 1 auto; display: flex; min-height: 0; }
+    #logpanel { flex: 0 0 360px; display: flex; flex-direction: column; border-right: 1px solid #ddd; background: #1e1e1e; }
+    #logpanel h2 { margin: 0; padding: 6px 10px; font-size: 12px; font-weight: 600; color: #aaa; letter-spacing: .04em; text-transform: uppercase; border-bottom: 1px solid #333; }
+    #log { flex: 1 1 auto; overflow-y: auto; padding: 8px 10px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; line-height: 1.5; color: #ddd; white-space: pre-wrap; word-break: break-word; }
+    #log .start { color: #7fb3ff; }
+    #log .done { color: #7ee787; }
+    #log .fail { color: #ff7b72; }
+    #cy { flex: 1 1 auto; min-width: 0; }
   </style>
 </head>
 <body>
@@ -18,7 +27,13 @@
     <button id="go">Ingest</button>
   </div>
   <div id="status"></div>
-  <div id="cy"></div>
+  <div id="main">
+    <div id="logpanel">
+      <h2>Ingest log</h2>
+      <div id="log"></div>
+    </div>
+    <div id="cy"></div>
+  </div>
   <script>
     const COLORS = {
       Technique: "#2b8cbe", Concept: "#41ab5d", Model: "#e6550d", Tool: "#756bb1",
@@ -53,20 +68,47 @@
       document.getElementById("status").textContent = "Source: " + ev.target.data("quote");
     });
 
+    const logEl = document.getElementById("log");
+    function appendLog(line) {
+      const div = document.createElement("div");
+      if (line.includes("FAILED")) div.className = "fail";
+      else if (line.includes("DONE")) div.className = "done";
+      else if (line.includes("START")) div.className = "start";
+      div.textContent = line;
+      logEl.appendChild(div);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    let logSeq = 0;
+    async function pollLogs() {
+      try {
+        const d = await (await fetch("/logs?after=" + logSeq)).json();
+        logSeq = d.seq;
+        for (const line of d.lines) appendLog(line);
+      } catch (e) { /* transient; keep polling */ }
+    }
+    setInterval(pollLogs, 1000);
+    pollLogs();
+
     document.getElementById("go").onclick = async () => {
       const url = document.getElementById("url").value.trim();
       if (!url) return;
       const status = document.getElementById("status");
       status.textContent = "Ingesting ...";
-      const r = await fetch("/ingest", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
-      });
-      const data = await r.json();
-      status.textContent = r.ok
-        ? `Added ${data.nodes} nodes, ${data.edges} edges.`
-        : `Error: ${data.error}`;
-      if (r.ok) { document.getElementById("url").value = ""; await loadGraph(); }
+      try {
+        const r = await fetch("/ingest", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        });
+        const data = await r.json();
+        status.textContent = r.ok
+          ? `Added ${data.nodes} nodes, ${data.edges} edges.`
+          : `Error: ${data.error}`;
+        if (r.ok) { document.getElementById("url").value = ""; await loadGraph(); }
+      } catch (e) {
+        status.textContent = "Request failed: " + e;
+      }
+      await pollLogs();
     };
 
     loadGraph();
