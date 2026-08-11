@@ -13,6 +13,17 @@ from learn_wiki.errors import LearnWikiError
 _STATIC = Path(__file__).parent / "static"
 logger = logging.getLogger("uvicorn.error")
 
+_NO_CACHE = {"Cache-Control": "no-store, max-age=0"}
+
+
+class NoCacheStaticFiles(StaticFiles):
+    # Local dev tool: never let the browser cache static assets, so edits to
+    # CSS/JS/HTML show up on a normal refresh instead of appearing unchanged.
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-store, max-age=0"
+        return response
+
 # In-memory ring buffer of ingest log lines, exposed via GET /logs so the
 # browser can show live progress. Attached once at import (not per create_app).
 _LOG_BUFFER: collections.deque = collections.deque(maxlen=300)
@@ -102,7 +113,7 @@ def create_app(store: GraphStore, extractor: Extractor, ingest_fn=default_ingest
 
     @app.get("/")
     def index():
-        return FileResponse(_STATIC / "index.html")
+        return FileResponse(_STATIC / "index.html", headers=_NO_CACHE)
 
     @app.get("/api/entities")
     def entities_endpoint():
@@ -117,8 +128,8 @@ def create_app(store: GraphStore, extractor: Extractor, ingest_fn=default_ingest
 
     @app.get("/wiki")
     def wiki_page():
-        return FileResponse(_STATIC / "wiki.html")
+        return FileResponse(_STATIC / "wiki.html", headers=_NO_CACHE)
 
-    app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
+    app.mount("/static", NoCacheStaticFiles(directory=str(_STATIC)), name="static")
 
     return app

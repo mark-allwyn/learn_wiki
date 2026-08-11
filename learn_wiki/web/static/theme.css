@@ -57,6 +57,10 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* The graph page relies on a full-height column so the graph pane fills the
+   remaining space (and its bottom controls stay on-screen). */
+body.app { display: flex; flex-direction: column; overflow: hidden; }
+
 /* No decorative glow - flat background */
 .sky { display: none; }
 
